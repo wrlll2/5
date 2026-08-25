@@ -3,7 +3,7 @@
 """
 Market Anomaly Monitor & Sentiment Notifier
 - 监测 A股、美股三大指数、日经225、韩国KOSPI 及美股市值 Top 10 股票
-- 当任一标的单日涨跌幅绝对值 >= 0% 时，抓取 StockTwits 与 Reddit (r/stocks) 外网金融热搜并发送 Bark 提醒
+- 当任一标的单日涨跌幅绝对值 >= 3% 时，抓取 StockTwits 与 Reddit (r/stocks) 外网金融热搜并发送 Bark 提醒
 - 否则静默退出 (exit 0)
 """
 
@@ -38,7 +38,7 @@ TARGET_ASSETS = [
     {"symbol": "LLY", "name": "礼来 (LLY)", "type": "Stock"},
 ]
 
-ALERT_THRESHOLD = 0.0  # 涨跌幅绝对值阈值 (3%)
+ALERT_THRESHOLD = 3.0  # 涨跌幅绝对值阈值 (3%)
 
 
 def get_market_data(target):
