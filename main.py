@@ -13,6 +13,12 @@ import requests
 import yfinance as yf
 from datetime import datetime
 
+# 确保控制台支持 UTF-8 输出
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 # 监测标的列表
 TARGET_ASSETS = [
     # --- 亚太与中国市场指数 ---
@@ -96,7 +102,8 @@ def get_market_data(target):
 
 def fetch_stocktwits_trending(limit=6):
     """
-    抓取 StockTwits 当前外网金融热搜标的
+    抓取 StockTwits 当前外网金融热搜标的并附带详情页链接
+    链接格式: https://stocktwits.com/symbol/{symbol}
     """
     url = "https://api.stocktwits.com/api/2/trending/symbols.json"
     headers = {
@@ -109,10 +116,14 @@ def fetch_stocktwits_trending(limit=6):
             data = resp.json()
             symbols = data.get("symbols", [])[:limit]
             for item in symbols:
-                sym = item.get("symbol", "")
-                title = item.get("title", "")
-                watchlist = item.get("watchlist_count", 0)
-                trending_list.append(f"${sym} ({title})")
+                sym = item.get("symbol", "").strip()
+                title = item.get("title", "").strip()
+                if sym:
+                    trending_list.append({
+                        "symbol": sym,
+                        "title": title,
+                        "url": f"https://stocktwits.com/symbol/{sym}"
+                    })
     except Exception as e:
         print(f"[WARN] 抓取 StockTwits 热搜失败: {e}", file=sys.stderr)
 
@@ -121,7 +132,7 @@ def fetch_stocktwits_trending(limit=6):
 
 def fetch_reddit_hot_topics(limit=5):
     """
-    抓取 Reddit r/stocks 热门讨论帖
+    抓取 Reddit r/stocks 热门讨论帖并附带完整链接 (https://www.reddit.com + permalink)
     优先使用 old.reddit.com JSON 接口，若受限则降级使用 RSS Feed
     """
     headers = {
@@ -142,8 +153,14 @@ def fetch_reddit_hot_topics(limit=5):
                     continue
                 title = post.get("title", "").strip()
                 score = post.get("score", 0)
-                if title:
-                    hot_posts.append({"title": title, "score": score})
+                permalink = post.get("permalink", "").strip()
+                post_url = f"https://www.reddit.com{permalink}" if permalink.startswith("/") else permalink
+                if title and post_url:
+                    hot_posts.append({
+                        "title": title,
+                        "score": score,
+                        "url": post_url
+                    })
                 if len(hot_posts) >= limit:
                     return hot_posts
     except Exception as e:
@@ -161,10 +178,16 @@ def fetch_reddit_hot_topics(limit=5):
             entries = root.findall("atom:entry", ns)
             for entry in entries:
                 title_elem = entry.find("atom:title", ns)
+                link_elem = entry.find("atom:link", ns)
                 if title_elem is not None and title_elem.text:
                     title = title_elem.text.strip()
+                    post_url = link_elem.attrib.get("href", "").strip() if link_elem is not None else ""
                     if "Daily Discussion" not in title and "Rate My Portfolio" not in title:
-                        hot_posts.append({"title": title, "score": "-"})
+                        hot_posts.append({
+                            "title": title,
+                            "score": "-",
+                            "url": post_url
+                        })
                 if len(hot_posts) >= limit:
                     break
     except Exception as e:
@@ -215,7 +238,7 @@ def send_bark_notification(bark_key, title, body):
 
 def build_alert_message(triggered_items, normal_items, stocktwits_trends, reddit_posts):
     """
-    组装清晰易读的 Bark 推送内容
+    组装清晰易读的 Bark 推送内容，优化排版与链接可点击性
     """
     title = f"🚨 市场异动预警 ({len(triggered_items)} 个标的 ≥ 3%)"
 
@@ -234,12 +257,15 @@ def build_alert_message(triggered_items, normal_items, stocktwits_trends, reddit
     if stocktwits_trends:
         lines.append("\n🔥【StockTwits 趋势热搜】")
         for idx, item in enumerate(stocktwits_trends, 1):
-            lines.append(f"{idx}. {item}")
+            lines.append(f"{idx}. ${item['symbol']} ({item['title']})")
+            lines.append(f"   🔗 {item['url']}")
 
     if reddit_posts:
         lines.append("\n💬【Reddit r/stocks 热门讨论】")
         for idx, post in enumerate(reddit_posts, 1):
-            lines.append(f"{idx}. [🔥{post['score']}] {post['title']}")
+            score_tag = f"[🔥 {post['score']}] " if post.get("score") and post["score"] != "-" else ""
+            lines.append(f"{idx}. {score_tag}{post['title']}")
+            lines.append(f"   🔗 {post['url']}")
 
     body = "\n".join(lines)
     return title, body
