@@ -44,7 +44,7 @@ TARGET_ASSETS = [
     {"symbol": "LLY", "name": "礼来 (LLY)", "type": "Stock"},
 ]
 
-ALERT_THRESHOLD = 0.0  # 涨跌幅绝对值阈值 (3%)
+ALERT_THRESHOLD = 3.0  # 涨跌幅绝对值阈值 (3%)
 
 
 def get_market_data(target):
